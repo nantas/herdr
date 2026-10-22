@@ -2,7 +2,36 @@
 
 本目录是本 fork 的个人工作流维护入口，不属于 Herdr 官方功能。脚本使用 Herdr CLI，不改动核心运行时。原始讨论留在本地 `.local/prd/`；可复用工具以本目录为准。
 
-2026-10-22 验证环境：Mac 与 Linux 均为 Herdr 0.9.5 stable、Codex CLI 0.163.0，Herdr 位于各自的 `~/.local/bin/`。需要 Python 3、SSH，以及 PATH 中的 `herdr` 和 `codex`。脚本使用 Unix 文件锁，未支持 Windows。
+2026-10-22 原双机验证环境：Mac 与 Linux 均为 Herdr 0.9.5 stable、Codex CLI 0.163.0，Herdr 位于各自的 `~/.local/bin/`。需要 Python 3、SSH，以及 PATH 中的 `herdr` 和 `codex`。以下旧拓扑仅适用于对应局域网，不应直接复制到其他机器。
+
+### Windows 控制端
+
+启动器支持 Windows 的进程文件锁，Windows Python 还需要 `windows-curses`（已验证 Python 3.14 与 windows-curses 2.4.2）。安装 Herdr 时保留完整 Windows ZIP 中的 ConPTY 运行库。
+
+将启动器保存到 `%USERPROFILE%\.config\herdr-project\herdr-project.py`，将本机专用的预设放到同目录 `presets.json`。通过 PATH 中的 `herdr-project.cmd` 调用实际 Python 路径及脚本，并转发 `%*`；不要依赖 Windows Store 的 Python 别名。Windows Herdr 配置在 `%APPDATA%\herdr\config.toml`，项目弹窗命令使用 PATH 中的 `herdr-project --pick`，其余字段沿用 `presets/picker.toml`。
+
+本机预设使用 `session: work` 和 Windows 绝对目录；远端预设使用已保存的 `machine` 标签和远端绝对目录。远端目录若为符号链接，先通过 SSH 在目标目录执行 `pwd -P`，保存实际路径，以便与 Herdr 返回的前台目录匹配。每台控制端独立维护预设、状态与锁，不复制旧局域网配置或 `state.json`。
+
+用 `herdr machine add <SSH别名> --label <标签> --remote-session work` 保存远端，再运行 `herdr session attach work` 打开聚合界面。在 Local 按 `Ctrl+B` 后按 `Alt+P` 选择项目；远端项目准备完成后关闭提示，再从侧边栏选择该机器。命令行也可执行 `herdr-project <预设名>`；已有界面时用 `--no-attach`。
+
+直接打开 SSH 界面时，要使用远端扩展快捷键，需加 `--remote-keybindings server`。项目启动器的远端 attach 已自动加此参数；手工连接例如 `herdr --remote mac-pi --session work --remote-keybindings server`。未加该参数时，0.9.5 的直接 SSH 客户端不提供远端自定义命令，不能据此判断远端工具没有安装。
+
+当前 Windows/mac-pi 已部署 `Ctrl+B` 后 `Alt+G` 的 Git 文件列表。Windows 使用 `herdr-git-status.cmd` 调用 Python（`-X utf8`）与已安装脚本，Mac 使用 `~/.local/bin/herdr-git-status`。Windows 快照缺少 `foreground_cwd` 时，工具通过 `pane process-info --pane` 查询实时前台进程；只有所有前台进程提供一致目录时才继续，绝不使用旧 `cwd` 静默回退。PDCurses 使用原生键盘/鼠标事件，macOS 保留 SGR 序列解析。
+
+2026-10-22 配置迁移验证：两端配置检查与 reload 成功；Windows 临时会话验证切换目录后的 Git 定位、双向滚轮、End、刷新、关闭及项目选择器打开/取消；Windows 经 SSH 在 Mac 临时会话验证远端 Git 目录、双向滚轮、End 和三个 Mac 项目的选择器。Windows Git 测试 9 项、项目启动器/选择器 18 项、Pi 补全路由 8 项通过；Mac Git 测试 9 项通过。没有重启原 `work` 或提交模型任务。测试命令使用 Python/Bun（当前机器未安装 `just`）。
+
+当前 Windows 的用户级 Windows PowerShell profile 与 Mac `.zshrc` 已加入交互终端颜色处理，只在 `HERDR_ENV=1` 时清除 `NO_COLOR`；新 shell 生效，已有 Agent 环境不变。两端 Pi 均安装 GitHub 自动补全扩展，并以无模型请求的 RPC 启动验证加载：Windows 引用本 checkout 的 `.pi/extensions/github-issues-autocomplete`，Mac 使用 `~/.local/share/herdr-tools/github-issues-autocomplete` 副本。Pi 扩展提供 `@issue` / `@pr` 补全，不改变 Codex。旧 Mac→Linux 的私有配置同步 skill 经用户决定暂不迁移。
+
+2026-10-22 Windows 验证：Herdr 0.9.5、Codex 0.163.0；五个本机/远端预设启动及再次选择复用成功，terminal ID 保持不变；真实 Windows 终端选择器打开/取消，以及 Herdr 内弹窗选择本机项目后退出并聚焦通过。未提交模型任务。未配置休眠策略。
+
+当前 Windows/mac-pi 环境已按用户选择配置**登录后**自动启动 `work` 服务器，不是无人登录时启动：
+
+- Windows：任务计划程序的 `Herdr work server`，当前用户、普通权限、登录触发；无运行时限，电池供电不停止，忽略重复启动。启动脚本在 `%LOCALAPPDATA%\herdr\autostart\work-server.ps1`，通过安装器的 `current\herdr.exe` 路径运行隐藏服务器；标准输出与错误分别写入同目录日志，避免 Windows PowerShell 将原生命令的正常 stderr 当作终止错误。服务器由任务计划服务托管，不依赖创建它的终端或 Agent 会话。
+- mac-pi：`~/Library/LaunchAgents/local.herdr.work.plist`，`RunAtLoad` 通过 `/usr/bin/python3 ~/.config/herdr/autostart/session-server.py ~/.local/bin/herdr --session work server` 启动，由当前用户的 launchd GUI 域托管；包装脚本源为 [session-server.py](presets/session-server.py)，以 `start_new_session=True` 创建服务器、等待退出并转发终止信号。日志在 `~/.config/herdr/autostart/`。注销用户后不保证继续运行，下次登录重新启动。
+
+直接由 launchd 启动的进程可能只有进程组 ID 等于 PID，而 Unix 会话 ID 不等于 PID。Herdr 0.9.5 会因此报告 `detached_server_daemon: false` 并在直接 SSH attach 时建议重启。上述包装脚本使服务器的会话 ID 等于 PID，同时保留 launchd 托管。已实测返回 `detached_server_daemon: true`，Windows 直接 SSH attach 不再提示重启，分离客户端后服务器继续运行。外置盘授权经用户允许后，在新启动方式下仍有效，三个远端 Codex 已重新启动；Codex 自身的 hook 信任提示由用户决定，不自动批准。
+
+已通过任务计划启动及 launchd bootstrap 验证两端服务器可达，并核对 Windows 的服务进程祖先及 Mac 的 PID 1 父进程；未执行整机重启验收。自启动仅启动 Herdr 服务器，不保证恢复原 Codex 对话。此次服务器重启恢复了项目目录和窗格，但 terminal ID 更新且没有自动恢复 Agent；人工核对唯一匹配的空窗格、备份并更新控制端映射后，Windows 两个项目与 Mac 内置盘项目重新启动成功。Mac 外置盘项目在 launchd 上下文中触发系统 TCC 卷访问请求，需要用户在桌面完成授权后再验证；不能把 SSH 上下文可访问外置盘视为 launchd 已获授权。不要在将来的重启后直接假设旧 `state.json` 仍指向有效实例。
 
 ## 节点与会话
 

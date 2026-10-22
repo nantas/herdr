@@ -19,7 +19,9 @@ class GitTests(unittest.TestCase):
         self.root = Path(self.temp.name) / 'main'
         self.root.mkdir()
         self.git('init', '-q')
-        for name in ('staged.txt', 'both.txt', 'unstaged.txt', 'old\tname.txt'):
+        self.old = 'old name.txt' if os.name == 'nt' else 'old\tname.txt'
+        self.new = 'new name.txt' if os.name == 'nt' else 'new\nname.txt'
+        for name in ('staged.txt', 'both.txt', 'unstaged.txt', self.old):
             (self.root / name).write_text('original\n')
         self.git('add', '.')
         self.git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
@@ -35,8 +37,10 @@ class GitTests(unittest.TestCase):
             (self.root / name).write_text('changed\n')
         self.git('add', '--', 'staged.txt', 'both.txt')
         (self.root / 'both.txt').write_text('changed again\n')
-        self.git('mv', '--', 'old\tname.txt', 'new\nname.txt')
+        self.git('mv', '--', self.old, self.new)
         special = '空 格\tline\n"quote".txt'
+        if os.name == 'nt':
+            special = '空 格.txt'
         (self.root / special).write_text('untracked')
         (self.root / '-leading-dash').write_text('untracked')
         index = (self.root / '.git/index').read_bytes()
@@ -45,7 +49,7 @@ class GitTests(unittest.TestCase):
         self.assertIn(('M ', 'staged.txt', None), rows)
         self.assertIn((' M', 'unstaged.txt', None), rows)
         self.assertIn(('MM', 'both.txt', None), rows)
-        self.assertIn(('R ', 'new\nname.txt', 'old\tname.txt'), rows)
+        self.assertIn(('R ', self.new, self.old), rows)
         self.assertIn(('??', special, None), rows)
         self.assertIn(('??', '-leading-dash', None), rows)
         self.assertEqual(index, (self.root / '.git/index').read_bytes())
@@ -85,7 +89,7 @@ class GitTests(unittest.TestCase):
         with patch.dict(os.environ, {'HERDR_ACTIVE_PANE_ID': 'w1:p1', 'HERDR_SOCKET_PATH': '/test.sock'}), \
                 patch.object(viewer.subprocess, 'run', return_value=result):
             self.assertEqual(viewer.active_directory(), str(self.root))
-            for value in ({'cwd': str(self.root)}, {'foreground_cwd': '/unavailable-node-path'}):
+            for value in ({'foreground_cwd': '/unavailable-node-path'},):
                 result.stdout = json.dumps({'result': {'pane': value}})
                 with self.assertRaisesRegex(RuntimeError, 'unavailable'):
                     viewer.active_directory()
@@ -93,6 +97,24 @@ class GitTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 viewer.active_directory()
             run.assert_not_called()
+
+    def test_process_directory_fallback_requires_unambiguous_live_evidence(self):
+        def response(value):
+            return subprocess.CompletedProcess([], 0, json.dumps({'result': value}), '')
+        snapshot = response({'pane': {'cwd': '/stale-launch-directory'}})
+        for processes, succeeds in [([{'cwd': str(self.root)}], True),
+                                    ([], False), ([{}], False),
+                                    ([{'cwd': str(self.root)}, {}], False),
+                                    ([{'cwd': str(self.root)}, {'cwd': '/other'}], False)]:
+            live = response({'process_info': {'foreground_processes': processes}})
+            with patch.dict(os.environ, {'HERDR_ACTIVE_PANE_ID': 'w1:p1', 'HERDR_SOCKET_PATH': '/test.sock'}), \
+                    patch.object(viewer.subprocess, 'run', side_effect=[snapshot, live]) as run:
+                if succeeds:
+                    self.assertEqual(Path(viewer.active_directory()), self.root)
+                else:
+                    with self.assertRaisesRegex(RuntimeError, 'unavailable'):
+                        viewer.active_directory()
+                self.assertEqual(run.call_args.args[0][-3:], ['process-info', '--pane', 'w1:p1'])
 
 
 class Screen:

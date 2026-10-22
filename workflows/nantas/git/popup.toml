@@ -6,3 +6,12 @@ command = "$HOME/.local/bin/herdr-git-status"
 description = "browse worktree changes"
 width = "90%"
 height = "85%"
+
+# Alternate binding when the terminal or desktop intercepts Alt+G.
+[[keys.command]]
+key = "prefix+ctrl+g"
+type = "popup"
+command = "$HOME/.local/bin/herdr-git-status"
+description = "browse worktree changes (alternate)"
+width = "90%"
+height = "85%"

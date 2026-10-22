@@ -19,6 +19,19 @@ def active_directory():
         raise RuntimeError('Cannot read active pane: ' + result.stderr.strip())
     pane = json.loads(result.stdout)['result']['pane']
     cwd = pane.get('foreground_cwd')
+    if not cwd:
+        # Windows snapshots can omit foreground_cwd; query live processes rather
+        # than using the pane's potentially stale launch directory.
+        result = subprocess.run([os.environ.get('HERDR_BIN_PATH', 'herdr'), 'pane',
+                                 'process-info', '--pane', pane_id],
+                                capture_output=True, text=True, timeout=10)
+        if result.returncode:
+            raise RuntimeError('Cannot read foreground process directory: ' + result.stderr.strip())
+        processes = json.loads(result.stdout)['result']['process_info']['foreground_processes']
+        directories = {os.path.normcase(os.path.normpath(p['cwd']))
+                       for p in processes if p.get('cwd')}
+        if processes and len(directories) == 1 and all(p.get('cwd') for p in processes):
+            cwd = next(iter(directories))
     if not cwd or not Path(cwd).is_absolute() or not Path(cwd).is_dir():
         raise RuntimeError('Active pane directory is unavailable on this node; no repository queried.')
     return cwd
@@ -36,12 +49,12 @@ def parse_status(raw):
         if len(entry) < 4 or entry[2:3] != b' ':
             raise ValueError('Invalid Git status record')
         status = entry[:2].decode('ascii')
-        path = os.fsdecode(entry[3:])
+        path = entry[3:].decode('utf-8', errors='surrogateescape')
         original = None
         if 'R' in status or 'C' in status:
             if index >= len(fields):
                 raise ValueError('Missing rename source')
-            original = os.fsdecode(fields[index])
+            original = fields[index].decode('utf-8', errors='surrogateescape')
             index += 1
         rows.append((status, path, original))
     return rows
@@ -59,7 +72,7 @@ def read_status(cwd):
         if result.returncode:
             raise RuntimeError(result.stderr.decode(errors='replace').strip() or 'Git query failed')
         return result.stdout
-    root = os.fsdecode(git('rev-parse', '--show-toplevel').removesuffix(b'\n'))
+    root = git('rev-parse', '--show-toplevel').removesuffix(b'\n').decode('utf-8', errors='surrogateescape')
     rows = parse_status(git('-c', 'status.renames=true', 'status', '--porcelain=v1', '-z',
                             '--untracked-files=all'))
     return root, rows
@@ -117,7 +130,10 @@ def read_key(screen):
 
 
 def popup(screen):
-    screen.keypad(False)
+    # PDCurses on Windows translates console key/mouse events itself; ncurses
+    # on macOS needs raw SGR decoding for wheel-down support.
+    screen.keypad(os.name == 'nt')
+    curses.mousemask(curses.ALL_MOUSE_EVENTS)
     sys.stdout.write('\x1b[?1000h\x1b[?1006h')
     sys.stdout.flush()
     try:
@@ -129,7 +145,8 @@ def popup(screen):
 
 def view(screen):
     curses.curs_set(0)
-    curses.set_escdelay(25)
+    if hasattr(curses, 'set_escdelay'):
+        curses.set_escdelay(25)
     top = left = 0
     refresh = True
     root = ''
@@ -158,6 +175,12 @@ def view(screen):
         draw(screen, max(0, height - 1), 'r: refresh | Esc/q: close')
         screen.refresh()
         key = read_key(screen)
+        if key == curses.KEY_MOUSE:
+            _, _, _, _, buttons = curses.getmouse()
+            if buttons & curses.BUTTON4_PRESSED:
+                key = 'wheel-up'
+            elif buttons & getattr(curses, 'BUTTON5_PRESSED', 0):
+                key = 'wheel-down'
         if key in (27, ord('q'), 3):
             return
         if key == ord('r'):

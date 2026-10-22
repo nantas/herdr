@@ -2,10 +2,10 @@
 """Open a fixed directory/agent preset without replacing existing work."""
 import argparse
 import curses
-import fcntl
+from contextlib import contextmanager
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
 import subprocess
 import sys
@@ -15,6 +15,28 @@ import time
 import uuid
 
 CONFIG = Path.home() / '.config/herdr-project'
+
+
+@contextmanager
+def launch_lock(path):
+    """Hold a nonblocking process lock on this controller."""
+    with path.open('a+b') as lock:
+        if os.name == 'nt':
+            import msvcrt
+            if path.stat().st_size == 0:
+                lock.write(b'\0')
+                lock.flush()
+            lock.seek(0)
+            msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+            try:
+                yield
+            finally:
+                lock.seek(0)
+                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            yield
 
 
 class ApiError(RuntimeError):
@@ -54,7 +76,8 @@ def validate(name, preset):
         value = preset.get(key)
         if not isinstance(value, str) or not value or any(ord(c) < 32 for c in value):
             raise ValueError('invalid ' + key)
-    if not Path(preset['cwd']).is_absolute():
+    if not (PurePosixPath(preset['cwd']).is_absolute()
+            or PureWindowsPath(preset['cwd']).is_absolute()):
         raise ValueError('cwd must be an absolute path on the execution node')
     if not isinstance(preset.get('args', []), list) or any(
         not isinstance(arg, str) or any(ord(c) < 32 for c in arg)
@@ -190,7 +213,8 @@ def launch_selected(name, preset):
 
 def pick_project(screen):
     try:
-        curses.set_escdelay(25)
+        if hasattr(curses, 'set_escdelay'):
+            curses.set_escdelay(25)
         curses.curs_set(0)
         curses.mousemask(curses.ALL_MOUSE_EVENTS)
         presets = load_presets()
@@ -275,10 +299,10 @@ def main():
                     preset['machine'] in (p['id'], p['label'])]
         if len(profiles) != 1:
             raise ValueError('saved machine must resolve to one enabled profile')
-        attach = ['herdr', '--remote', profiles[0]['target'], '--session', profiles[0]['session']]
+        attach = ['herdr', '--remote', profiles[0]['target'], '--session', profiles[0]['session'],
+                  '--remote-keybindings', 'server']
     state_path = CONFIG / 'state.json'
-    with (CONFIG / 'launch.lock').open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with launch_lock(CONFIG / 'launch.lock'):
         state = json.loads(state_path.read_text()) if state_path.exists() else {}
         try:
             result = ensure(args.preset, preset, state, lambda: save_state(state_path, state),
@@ -289,6 +313,8 @@ def main():
             raise
     print(json.dumps(result, ensure_ascii=False), flush=True)
     if not args.no_attach:
+        if os.name == 'nt':
+            sys.exit(subprocess.call(attach, env=clean_env()))
         os.execvpe('herdr', attach, clean_env())
 
 

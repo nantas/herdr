@@ -1,6 +1,9 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import subprocess
+import sys
+import tempfile
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('launcher', Path(__file__).with_name('herdr-project.py'))
@@ -10,6 +13,28 @@ PRESET = {'session': 'work', 'cwd': '/project', 'agent': 'codex', 'args': []}
 
 
 class PresetTests(unittest.TestCase):
+    def test_paths_are_validated_for_execution_node(self):
+        for cwd in ('/remote/project', r'D:\Projects\art'):
+            launcher.validate('project', {**PRESET, 'cwd': cwd})
+        for cwd in ('relative', 'D:relative'):
+            with self.assertRaises(ValueError):
+                launcher.validate('project', {**PRESET, 'cwd': cwd})
+
+    def test_lock_excludes_another_process_and_releases(self):
+        script = '''import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location('launcher', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+with module.launch_lock(pathlib.Path(sys.argv[2])):
+    pass
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'launch.lock'
+            command = [sys.executable, '-c', script, launcher.__file__, str(path)]
+            with launcher.launch_lock(path):
+                self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+            self.assertEqual(subprocess.run(command, capture_output=True).returncode, 0)
+
     def pane(self, cwd='/project', terminal='t1', agent='codex'):
         return {'pane_id': 'w1:p1', 'terminal_id': terminal, 'foreground_cwd': cwd,
                 'cwd': '/project', 'agent': agent}
