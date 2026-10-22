@@ -77,7 +77,9 @@ function getCachePath(cwd: string): string {
 async function readCache(cwd: string): Promise<CachedData> {
   try {
     const raw = await readFile(getCachePath(cwd), "utf8");
-    const data = JSON.parse(raw) as CachedData;
+    const data = JSON.parse(raw) as CachedData & { routingVersion?: number };
+    // Older caches may contain upstream results labeled with the fork name.
+    if (data.routingVersion !== 1) return { repo: null, issues: [], prs: [] };
     return {
       repo: data.repo ?? null,
       issues: Array.isArray(data.issues) ? data.issues : [],
@@ -94,7 +96,7 @@ async function readCache(cwd: string): Promise<CachedData> {
 async function writeCache(cwd: string, data: CachedData): Promise<void> {
   const cachePath = getCachePath(cwd);
   await mkdir(join(cwd, ".pi", "cache"), { recursive: true });
-  await writeFile(cachePath, JSON.stringify(data, null, 2), "utf8");
+  await writeFile(cachePath, JSON.stringify({ ...data, routingVersion: 1 }, null, 2), "utf8");
 }
 
 function replaceData(target: CachedData, source: CachedData): void {
@@ -178,10 +180,11 @@ async function fetchRepoName(
 async function fetchIssues(
   exec: ExtensionAPI["exec"],
   cwd: string,
+  repo: RepoInfo,
 ): Promise<IssueInfo[] | null> {
   const result = await exec(
     "gh",
-    ["issue", "list", "--json", "number,title,labels,author,updatedAt", "--limit", "50", "--state", "open"],
+    ["issue", "list", "--repo", repo.fullName, "--json", "number,title,labels,author,updatedAt", "--limit", "50", "--state", "open"],
     { cwd, timeout: GH_TIMEOUT_MS },
   );
 
@@ -211,6 +214,7 @@ async function fetchIssues(
 async function fetchIssueByNumber(
   exec: ExtensionAPI["exec"],
   cwd: string,
+  repo: RepoInfo,
   number: number,
 ): Promise<IssueInfo | null> {
   const result = await exec(
@@ -219,6 +223,8 @@ async function fetchIssueByNumber(
       "issue",
       "view",
       String(number),
+      "--repo",
+      repo.fullName,
       "--json",
       "number,title,labels,author,updatedAt",
     ],
@@ -251,12 +257,15 @@ async function fetchIssueByNumber(
 async function fetchPRs(
   exec: ExtensionAPI["exec"],
   cwd: string,
+  repo: RepoInfo,
 ): Promise<PRInfo[] | null> {
   const result = await exec(
     "gh",
     [
       "pr",
       "list",
+      "--repo",
+      repo.fullName,
       "--json",
       "number,title,state,author,headRefName,updatedAt,isDraft",
       "--limit",
@@ -297,6 +306,7 @@ async function fetchPRs(
 async function fetchPRByNumber(
   exec: ExtensionAPI["exec"],
   cwd: string,
+  repo: RepoInfo,
   number: number,
 ): Promise<PRInfo | null> {
   const result = await exec(
@@ -305,6 +315,8 @@ async function fetchPRByNumber(
       "pr",
       "view",
       String(number),
+      "--repo",
+      repo.fullName,
       "--json",
       "number,title,state,author,headRefName,updatedAt,isDraft",
     ],
@@ -338,38 +350,34 @@ async function fetchPRByNumber(
   }
 }
 
-/** Fetch all data needed for the session in parallel. */
+/** Refresh lists only after the session repository has been resolved. */
 async function fetchIssueSnapshot(
   exec: ExtensionAPI["exec"],
   cwd: string,
-  previous?: CachedData,
+  repo: RepoInfo,
+  previous: CachedData,
 ): Promise<CachedData> {
-  const [repo, issues] = await Promise.all([
-    previous?.repo ? Promise.resolve(previous.repo) : fetchRepoName(exec, cwd),
-    fetchIssues(exec, cwd),
-  ]);
+  const issues = await fetchIssues(exec, cwd, repo);
   return {
-    repo: repo ?? previous?.repo ?? null,
-    issues: issues ?? previous?.issues ?? [],
-    prs: previous?.prs ?? [],
-    fetchedAt: new Date().toISOString(),
+    repo,
+    issues: issues ?? previous.issues,
+    prs: previous.prs,
+    fetchedAt: issues === null ? previous.fetchedAt : new Date().toISOString(),
   };
 }
 
 async function fetchPRSnapshot(
   exec: ExtensionAPI["exec"],
   cwd: string,
-  previous?: CachedData,
+  repo: RepoInfo,
+  previous: CachedData,
 ): Promise<CachedData> {
-  const [repo, prs] = await Promise.all([
-    previous?.repo ? Promise.resolve(previous.repo) : fetchRepoName(exec, cwd),
-    fetchPRs(exec, cwd),
-  ]);
+  const prs = await fetchPRs(exec, cwd, repo);
   return {
-    repo: repo ?? previous?.repo ?? null,
-    issues: previous?.issues ?? [],
-    prs: prs ?? previous?.prs ?? [],
-    fetchedAt: new Date().toISOString(),
+    repo,
+    issues: previous.issues,
+    prs: prs ?? previous.prs,
+    fetchedAt: prs === null ? previous.fetchedAt : new Date().toISOString(),
   };
 }
 
@@ -645,22 +653,22 @@ interface RefMatch {
 }
 
 function buildNudge(matches: RefMatch[]): string {
-  const lines: string[] = [];
+  const lines: string[] = ["Use the owner/repo from each reference for --repo."];
 
   for (const m of matches) {
     const uniqueRefs = [...new Set(m.refs)];
     if (m.type === "issue" && uniqueRefs.length > 0) {
       lines.push(
         `GitHub issues referenced: ${uniqueRefs.map((r) => `issue ${r}`).join(", ")}.`,
-        `To fetch issue details, use: gh issue view <number> --json number,title,body,labels,author,assignees,comments`,
-        `To list issues, use: gh issue list --json number,title,labels,author,updatedAt --state open`,
+        `To fetch issue details, use: gh issue view <number> --repo <owner/repo> --json number,title,body,labels,author,assignees,comments`,
+        `To list issues, use: gh issue list --repo <owner/repo> --json number,title,labels,author,updatedAt --state open`,
       );
     }
     if (m.type === "pr" && uniqueRefs.length > 0) {
       lines.push(
         `GitHub PRs referenced: ${uniqueRefs.map((r) => `pr ${r}`).join(", ")}.`,
-        `To fetch PR details, use: gh pr view <number> --json number,title,body,headRefName,baseRefName,author,reviews,mergeable`,
-        `To list PRs, use: gh pr list --json number,title,state,author,headRefName,updatedAt,isDraft --state all`,
+        `To fetch PR details, use: gh pr view <number> --repo <owner/repo> --json number,title,body,headRefName,baseRefName,author,reviews,mergeable`,
+        `To list PRs, use: gh pr list --repo <owner/repo> --json number,title,state,author,headRefName,updatedAt,isDraft --state all`,
       );
     }
   }
@@ -672,29 +680,41 @@ function buildNudge(matches: RefMatch[]): string {
 
 export default async function (pi: ExtensionAPI) {
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
+  let prRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let generation = 0;
 
   pi.on("session_start", async (_event, ctx) => {
+    const session = ++generation;
+    if (refreshTimer) clearInterval(refreshTimer);
+    if (prRefreshTimer) clearTimeout(prRefreshTimer);
     const cwd = ctx.cwd;
-    const data = await readCache(cwd);
+    const isCurrent = () => session === generation && ctx.cwd === cwd;
+    const repo = await fetchRepoName(pi.exec, cwd).catch(() => null);
+    if (!isCurrent()) return;
+    const cached = await readCache(cwd);
+    if (!isCurrent()) return;
+    const data: CachedData = repo && cached.repo?.fullName === repo.fullName
+      ? cached
+      : { repo, issues: [], prs: [] };
     let issueRefreshInFlight: Promise<void> | undefined;
     let prRefreshInFlight: Promise<void> | undefined;
 
     const refreshFromDisk = async () => {
-      const cached = await readCache(cwd);
-      if (
-        cached.repo !== null ||
-        cached.issues.length > 0 ||
-        cached.prs.length > 0 ||
-        cached.fetchedAt !== undefined
-      ) {
+      const cached = isCurrent() ? await readCache(cwd) : null;
+      if (!isCurrent()) {
+        replaceData(data, { repo: null, issues: [], prs: [] });
+        return;
+      }
+      if (repo && cached?.repo?.fullName === repo.fullName) {
         replaceDataIfNewer(data, cached);
       }
     };
 
     const refreshIssuesFromGithub = (force = false): Promise<void> => {
-      if (!force && !shouldRefresh(data)) return Promise.resolve();
-      issueRefreshInFlight ??= fetchIssueSnapshot(pi.exec, cwd, data)
+      if (!isCurrent() || !repo || (!force && !shouldRefresh(data))) return Promise.resolve();
+      issueRefreshInFlight ??= fetchIssueSnapshot(pi.exec, cwd, repo, data)
         .then(async (fresh) => {
+          if (!isCurrent()) return;
           replaceData(data, fresh);
           await writeCache(cwd, fresh);
         })
@@ -708,9 +728,10 @@ export default async function (pi: ExtensionAPI) {
     };
 
     const refreshPRsFromGithub = (force = false): Promise<void> => {
-      if (!force && !shouldRefresh(data)) return Promise.resolve();
-      prRefreshInFlight ??= fetchPRSnapshot(pi.exec, cwd, data)
+      if (!isCurrent() || !repo || (!force && !shouldRefresh(data))) return Promise.resolve();
+      prRefreshInFlight ??= fetchPRSnapshot(pi.exec, cwd, repo, data)
         .then(async (fresh) => {
+          if (!isCurrent()) return;
           replaceData(data, fresh);
           await writeCache(cwd, fresh);
         })
@@ -724,7 +745,9 @@ export default async function (pi: ExtensionAPI) {
     };
 
     const fetchAndCacheIssueByNumber = async (number: number) => {
-      const issue = await fetchIssueByNumber(pi.exec, cwd, number);
+      if (!isCurrent() || !repo) return null;
+      const issue = await fetchIssueByNumber(pi.exec, cwd, repo, number).catch(() => null);
+      if (!isCurrent()) return null;
       if (issue) {
         upsertIssue(data, issue);
         data.fetchedAt = new Date().toISOString();
@@ -734,7 +757,9 @@ export default async function (pi: ExtensionAPI) {
     };
 
     const fetchAndCachePRByNumber = async (number: number) => {
-      const pr = await fetchPRByNumber(pi.exec, cwd, number);
+      if (!isCurrent() || !repo) return null;
+      const pr = await fetchPRByNumber(pi.exec, cwd, repo, number).catch(() => null);
+      if (!isCurrent()) return null;
       if (pr) {
         upsertPR(data, pr);
         data.fetchedAt = new Date().toISOString();
@@ -753,7 +778,8 @@ export default async function (pi: ExtensionAPI) {
     );
 
     void refreshIssuesFromGithub(true);
-    setTimeout(() => void refreshPRsFromGithub(true), 1_000).unref?.();
+    prRefreshTimer = setTimeout(() => void refreshPRsFromGithub(true), 1_000);
+    prRefreshTimer.unref?.();
     refreshTimer = setInterval(
       () => void refreshIssuesFromGithub(false),
       CACHE_REFRESH_INTERVAL_MS,
@@ -762,11 +788,15 @@ export default async function (pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", async () => {
+    generation++;
     if (refreshTimer) clearInterval(refreshTimer);
+    if (prRefreshTimer) clearTimeout(prRefreshTimer);
     refreshTimer = undefined;
+    prRefreshTimer = undefined;
   });
 
   pi.on("before_agent_start", async (event) => {
+    if (!("prompt" in event)) return;
     const text = event.prompt;
 
     const issueRefs: string[] = [];
