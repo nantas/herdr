@@ -26,7 +26,7 @@ class ApiError(RuntimeError):
 def clean_env():
     env = os.environ.copy()
     for key in ('HERDR_SOCKET_PATH', 'HERDR_CLIENT_SOCKET_PATH', 'HERDR_SESSION',
-                'HERDR_WORKSPACE_ID', 'HERDR_TAB_ID', 'HERDR_PANE_ID'):
+                'HERDR_WORKSPACE_ID', 'HERDR_TAB_ID', 'HERDR_PANE_ID', 'NO_COLOR'):
         env.pop(key, None)
     return env
 
@@ -107,7 +107,9 @@ def ensure(name, preset, state, persist, call):
     pane = choose(panes, preset, previous)
     created = False
     if pane is None:
-        result = call('workspace', 'create', '--cwd', preset['cwd'], '--label', name, '--no-focus')
+        # Override the running server's inherited NO_COLOR for interactive terminals.
+        result = call('workspace', 'create', '--cwd', preset['cwd'], '--label', name,
+                      '--env', 'NO_COLOR=', '--no-focus')
         pane = result['root_pane']
         created = True
     state[name] = {'terminal_id': pane['terminal_id'], 'pane_id': pane['pane_id'], 'preset': preset}

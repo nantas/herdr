@@ -92,6 +92,46 @@ Local 项目会聚焦对应工作区；远端成功后提示选择 `linux-work`�
 用户已在当前 Herdr 窗口手动验证通过。远端提示通过测试，尚未通过新弹窗实测 Linux 启动。配置和旧启动器备份保留在 Mac 的
 `~/.config/herdr/local-backups/`，不进入仓库。
 
+### 交互终端颜色
+
+启动器清除自身传给 Herdr 的 `NO_COLOR`，新建工作区时还通过 `--env NO_COLOR=`
+覆盖运行中服务端继承的禁色设置。已验证 Codex 0.163.0 将空值视为允许颜色。
+本地和远端新建工作区都使用此覆盖，无需重启 `work` 或重新构建 Herdr。
+
+手工启动路径由 [交互 shell 片段](shell/interactive-colors.sh) 覆盖：Mac 和 Linux 均已安装到
+`~/.config/herdr/interactive-colors.sh`，并由各自 `~/.zshrc` 加载。仅当 shell 是交互式且
+`HERDR_ENV=1` 时清除 `NO_COLOR`；普通终端和非交互命令保留其原设置。
+以后在 Herdr 手工新建窗格，再直接运行 `codex`，也会使用清理后的环境。
+
+在其他节点安装时，复制此片段到上述路径，并在该节点 `.zshrc` 末尾添加一次：
+
+```sh
+# nantas Herdr interactive colors
+[ ! -r "$HOME/.config/herdr/interactive-colors.sh" ] || . "$HOME/.config/herdr/interactive-colors.sh"
+```
+
+安装前先备份原 `.zshrc`；现有两端备份保留在各节点
+`~/.config/herdr/shell-backups/`，不复制回仓库。卸载时移除这两行及片段文件。
+验证：`python3 workflows/nantas/shell/test_colors.py`。
+已用两端真实 `zsh -lic` 启动验证：Herdr 环境清除变量，普通环境保留变量。
+
+已有工作区及 Agent 的环境不会被修改。旧实例如无颜色，等任务结束后退出 Codex，
+在该窗格的 **shell 提示符**中执行以下命令，并选择原会话：
+
+```sh
+unset NO_COLOR
+codex resume
+```
+
+这会清除当前 shell 的变量，之后从同一个 shell 普通启动 Codex 也会允许颜色。
+`env -u NO_COLOR codex resume` 也可恢复颜色，但只对该次启动有效，不改变父 shell。
+重新 attach 或 reload config 不会改变旧进程的环境；无需停止整个 `work`。
+
+2026-10-22 安装状态：Mac 与 Linux 的 zsh 启动适配均已部署；两端真实 shell
+环境对照验证及本地回归测试通过。未重启现有 Agent，未完成新远端 Agent 的颜色端到端验证。
+若要回退，优先只删除上述加载片段，避免恢复整份旧 `.zshrc` 时覆盖安装后的其他修改。
+
+
 ### 复用与上下文
 
 - 根据实际前台目录和 Agent 类型匹配，不依赖工作区标签。实例已经转到别的项目时保留原实例，另建目标项目实例。

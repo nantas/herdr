@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('launcher', Path(__file__).with_name('herdr-project.py'))
 launcher = importlib.util.module_from_spec(spec)
@@ -12,6 +13,13 @@ class PresetTests(unittest.TestCase):
     def pane(self, cwd='/project', terminal='t1', agent='codex'):
         return {'pane_id': 'w1:p1', 'terminal_id': terminal, 'foreground_cwd': cwd,
                 'cwd': '/project', 'agent': agent}
+
+    def test_launcher_environment_removes_no_color_without_mutating_parent(self):
+        with patch.dict(launcher.os.environ, {'NO_COLOR': '1', 'COLORTERM': 'truecolor'}):
+            env = launcher.clean_env()
+            self.assertNotIn('NO_COLOR', env)
+            self.assertEqual(env['COLORTERM'], 'truecolor')
+            self.assertEqual(launcher.os.environ['NO_COLOR'], '1')
 
     def test_actual_directory_wins_over_original_directory(self):
         pane = self.pane(cwd='/other-project')
@@ -38,6 +46,7 @@ class PresetTests(unittest.TestCase):
             if args[:2] == ('pane', 'list'):
                 return {'panes': panes}
             if args[:2] == ('workspace', 'create'):
+                self.assertEqual(args[args.index('--env') + 1], 'NO_COLOR=')
                 panes.append(self.pane(agent=None))
                 return {'root_pane': panes[0]}
             if args[:2] == ('agent', 'start'):
