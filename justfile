@@ -21,6 +21,10 @@ nantas-presets-test:
     {{python}} workflows/nantas/presets/test_presets.py
     {{python}} workflows/nantas/presets/test_picker.py
 
+# Test read-only Git popup parsing, targeting, and navigation in temporary repositories.
+nantas-git-test:
+    {{python}} workflows/nantas/git/test_git_status.py
+
 # Local interactive Windows Terminal input qualification (never runs in normal CI).
 [windows]
 test-windows-input *args:

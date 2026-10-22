@@ -137,6 +137,49 @@ herdr --machine linux-work status server
 
 `--machine linux-work` 已绑定远端会话，不与 `--session` 混用。CLI 的目标由命令参数决定，与界面当前选中的机器无关。
 
+## Git 变更文件弹窗
+
+[herdr-git-status.py](git/herdr-git-status.py) 在选中节点上只读查询当前 pane 的实际前台目录，
+再由 Git 定位所属 worktree。目录不可用、非 Git 目录或查询失败时显示错误，不回退到
+启动目录或 Mac 上的同名路径。`r` 刷新会重新查询实际目录；干净工作区显示明确提示。
+
+Mac 和 Linux 各安装同一脚本到 `~/.local/bin/herdr-git-status`，需要 Python 3（含 curses）
+和 Git。在各节点能访问源码的位置执行：
+
+```bash
+install -m 755 workflows/nantas/git/herdr-git-status.py "$HOME/.local/bin/herdr-git-status"
+```
+
+将 [popup.toml](git/popup.toml) 条目分别合并到两端 `~/.config/herdr/config.toml`，
+先备份并检查快捷键冲突，保留已有设置。文件不存在时可用此片段新建。
+每个节点执行 `herdr config check` 和 `herdr --session work server reload-config`；
+从 Mac 也可用 `herdr --machine linux-work server reload-config` 重载远端。
+工具和配置各自部署，Herdr 不会自动复制它们。
+
+在 Local 或 linux-work 的目标 pane 上，按 `Ctrl+B` 再按 `Alt+G` 打开。
+弹窗在当前客户端显示，但脚本、pane 查询和 Git 命令都在选中服务端运行。
+
+- 滚轮、上下键或 `j/k` 滚动，PageUp/PageDown 翻页，Home/End 到首尾。
+- 左右键横向浏览长文件名；Home 同时复位横向偏移。
+- `r` 刷新；Esc 或 `q` 关闭并返回原 pane。
+- 前两列分别表示暂存区和工作区的状态，空格表示该列没有变更。`M ` 表示已暂存修改，
+  ` M` 表示未暂存修改，`MM` 表示两者都有；`A` 新增、`D` 删除、`R` 重命名，
+  `??` 表示未跟踪。重命名显示旧名 → 新名，制表符、换行等文件名字符以转义形式展示。
+
+首版只展示文件列表，不查看完整 diff、不暂存、不提交。Git 查询禁用可选 index 锁写入。
+测试：`just nantas-git-test`，使用临时仓库覆盖普通及 linked worktree、各类变更、重命名、
+特殊文件名、失败和滚动刷新。Mac 系统 curses 缺少向下滚轮常量，工具直接解析标准 SGR
+鼠标序列，两端不需要额外 Python 包。
+
+2026-10-22：两端工具及快捷键均已部署并 reload；Mac 原有 4 个和 Linux 原有 2 个 terminal
+身份保持不变。Herdr 0.9.5 的两端隔离会话验证了弹窗、双向滚轮、关闭后的 pane/焦点恢复；
+Mac 另实测刷新到新增文件并滚到列表末尾，SSH 客户端实测显示 Linux 临时仓库，未查询 Mac 路径。
+临时会话均已停止并删除。用户已在当前窗口手动验收，并确认修正后的列说明和状态图例。
+未操作实际项目 Git 状态，未启动或重启现有 Agent。
+
+备份只在各节点 `~/.config/herdr/local-backups/`。Linux 原先没有 config.toml，备份目录以
+`config-was-absent` 记录；回退时移除本快捷键和工具并 reload，保留安装后新增的其他配置。
+
 ## neonspark 私有配置同步
 
 [neonspark-local-config skill](skills/neonspark-local-config/SKILL.md) 是项目级工作流入口。由 Mac 主动经 SSH 推送 Linux，无需反向连接或中心配置服务。只处理以下相对路径：

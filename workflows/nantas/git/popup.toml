@@ -1,0 +1,8 @@
+# Merge on both Mac and Linux; the selected server runs its own copy.
+[[keys.command]]
+key = "prefix+alt+g"
+type = "popup"
+command = "$HOME/.local/bin/herdr-git-status"
+description = "browse worktree changes"
+width = "90%"
+height = "85%"
