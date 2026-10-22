@@ -1,0 +1,26 @@
+{
+  "neonspark-mac": {
+    "session": "work",
+    "cwd": "/Volumes/Shuttle/unity-projects/neonspark",
+    "agent": "codex",
+    "args": []
+  },
+  "neonspark-linux": {
+    "machine": "linux-work",
+    "cwd": "/home/nantas/data/projects/neonspark",
+    "agent": "codex",
+    "args": []
+  },
+  "neonnew-mac": {
+    "session": "work",
+    "cwd": "/Users/nantasmac/projects/neonnew",
+    "agent": "codex",
+    "args": []
+  },
+  "neondesign-mac": {
+    "session": "work",
+    "cwd": "/Volumes/Shuttle/unity-projects/neondesign",
+    "agent": "codex",
+    "args": []
+  }
+}

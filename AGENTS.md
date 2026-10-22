@@ -23,6 +23,16 @@ These instructions are layered.
   not a verified maintainer, the work is happening in a fork, or the account
   cannot be determined.
 
+## nantas Fork Workflow
+
+This section applies only to the `nantas/herdr` fork. For tasks involving
+nantas's Mac/Linux agent environment, `herdr-project` presets, session lifecycle,
+or neonspark private configuration sync, first read
+[the personal workflow guide](workflows/nantas/README.md).
+Reusable configuration and tools are maintained under `workflows/nantas/`.
+Keep private configuration contents and backups on their execution nodes;
+do not include them in repository documentation, commits, or agent output.
+
 ## Universal Project Rules
 
 ### Principles
