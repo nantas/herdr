@@ -19,6 +19,9 @@ linked work, and verify the authenticated account and fork permissions. Assign
 accepted work to the acting human account and record the scope in a comment.
 Keep the issue open until the implementation is delivered and its acceptance
 criteria are verified; local edits or a claim alone are not completion.
+Record the verification results before closing the task. A commit's `refs #N`
+links work to an issue; it does not establish completion or authorize automatic
+closure. The pending-release issue workflow runs only in herdrdev/herdr.
 
 ## Triage roles
 

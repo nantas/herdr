@@ -10,6 +10,13 @@ const release = load("release");
 const adminGate = release.jobs["validate-release-source"].steps[0];
 
 describe("official publishing workflow boundaries", () => {
+  test("pending-release issue writes run only in the upstream repository", () => {
+    const workflow = load("label-next-release-issues");
+    expect(workflow.on).toEqual({ push: { branches: ["master"] } });
+    expect(Object.keys(workflow.jobs)).toEqual(["close"]);
+    expect(workflow.jobs.close.if).toBe("github.repository == 'herdrdev/herdr'");
+  });
+
   test("publishing is tag-only while normal PR CI remains enabled", () => {
     expect(preview.on).toEqual({ push: { tags: ["preview-*"] } });
     expect(release.on).toEqual({ push: { tags: ["v*"] } });
