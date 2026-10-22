@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Open a fixed directory/agent preset without replacing existing work."""
 import argparse
+import curses
 import fcntl
 import json
 import os
@@ -9,6 +10,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import textwrap
 import time
 import uuid
 
@@ -132,11 +134,122 @@ def ensure(name, preset, state, persist, call):
     return {'preset': name, 'status': status, 'pane_id': pane['pane_id'], 'cwd': preset['cwd']}
 
 
+
+def load_presets():
+    presets = json.loads((CONFIG / 'presets.json').read_text())
+    if not isinstance(presets, dict) or not presets:
+        raise ValueError('No project presets configured')
+    for name, preset in presets.items():
+        validate(name, preset)
+    return presets
+
+
+def draw_line(screen, row, text, selected=False):
+    height, width = screen.getmaxyx()
+    if row >= height or width < 2:
+        return
+    # Error output and paths must not inject terminal controls into the popup.
+    text = ''.join(c if c.isprintable() else ' ' for c in text)
+    try:
+        screen.addnstr(row, 0, text, width - 1, curses.A_REVERSE if selected else 0)
+    except curses.error:
+        pass  # A resize can invalidate the dimensions between these calls.
+
+
+def picker_message(screen, message):
+    while True:
+        screen.erase()
+        height, width = screen.getmaxyx()
+        lines = [line for paragraph in message.splitlines()
+                 for line in (textwrap.wrap(paragraph, max(1, width - 1)) or [''])]
+        for row, line in enumerate(lines[:max(0, height - 2)]):
+            draw_line(screen, row, line)
+        draw_line(screen, max(0, height - 1), 'Enter / Esc / q: close')
+        screen.refresh()
+        if screen.getch() in (10, 13, 27, ord('q'), 3):
+            return
+
+
+def launch_selected(name, preset):
+    result = subprocess.run([sys.executable, str(Path(__file__).resolve()), name, '--no-attach'],
+                            capture_output=True, text=True, timeout=180)
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or 'Project launch failed')
+    status = json.loads(result.stdout)
+    message = name + ': ' + status['status'] + '\n' + preset['cwd']
+    if 'machine' in preset:
+        message += '\nSelect ' + preset['machine'] + ' in the Herdr sidebar to continue.'
+    else:
+        message += '\nClose this popup to use the selected Local workspace.'
+    if status['status'] == 'needs-input':
+        message += '\nThe agent needs input; inspect its pane before retrying.'
+    return message
+
+
+def pick_project(screen):
+    try:
+        curses.set_escdelay(25)
+        curses.curs_set(0)
+        curses.mousemask(curses.ALL_MOUSE_EVENTS)
+        presets = load_presets()
+        names = list(presets)
+        selected = 0
+        while True:
+            screen.erase()
+            height, _ = screen.getmaxyx()
+            visible = max(1, (height - 4) // 2)
+            start = max(0, selected - visible + 1)
+            draw_line(screen, 0, 'Project presets')
+            for row, name in enumerate(names[start:start + visible]):
+                preset = presets[name]
+                node = preset.get('machine', 'Local/' + preset.get('session', ''))
+                draw_line(screen, 1 + row * 2, name + '  [' + node + ']  ' + preset['agent'],
+                          start + row == selected)
+                draw_line(screen, 2 + row * 2, '  ' + preset['cwd'])
+            draw_line(screen, max(0, height - 2), 'Up/Down, j/k or mouse: select')
+            draw_line(screen, max(0, height - 1), 'Enter: start | Esc/q: cancel')
+            screen.refresh()
+            key = screen.getch()
+            if key in (27, ord('q'), 3):
+                return
+            if key in (curses.KEY_UP, ord('k')):
+                selected = max(0, selected - 1)
+            elif key in (curses.KEY_DOWN, ord('j')):
+                selected = min(len(names) - 1, selected + 1)
+            elif key == curses.KEY_MOUSE:
+                _, _, y, _, buttons = curses.getmouse()
+                if buttons & curses.BUTTON4_PRESSED:
+                    selected = max(0, selected - 1)
+                elif buttons & getattr(curses, 'BUTTON5_PRESSED', 0):
+                    selected = min(len(names) - 1, selected + 1)
+                elif buttons & curses.BUTTON1_CLICKED and 1 <= y < 1 + visible * 2:
+                    selected = min(len(names) - 1, start + (y - 1) // 2)
+            elif key in (10, 13, curses.KEY_ENTER):
+                screen.erase()
+                draw_line(screen, 0, 'Preparing ' + names[selected] + '... Please wait.')
+                screen.refresh()
+                preset = presets[names[selected]]
+                message = launch_selected(names[selected], preset)
+                # Local focus hides the popup; exit so it cannot retain the session slot.
+                if 'machine' in preset:
+                    picker_message(screen, message)
+                return
+    except Exception as error:
+        picker_message(screen, 'Unable to prepare project: ' + str(error)
+                       + '\nExisting work was not stopped. Inspect Herdr before retrying.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('preset', nargs='?')
+    parser.add_argument('--pick', action='store_true', help='choose a project in a terminal popup')
     parser.add_argument('--no-attach', action='store_true', help='prepare/focus and print status only')
     args = parser.parse_args()
+    if args.pick:
+        if args.preset or args.no_attach:
+            parser.error('--pick cannot be combined with a preset or --no-attach')
+        curses.wrapper(pick_project)
+        return
     presets = json.loads((CONFIG / 'presets.json').read_text())
     if not args.preset:
         for name, preset in presets.items():

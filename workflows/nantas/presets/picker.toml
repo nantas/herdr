@@ -1,0 +1,8 @@
+# Merge into the Mac config; launch from Local.
+[[keys.command]]
+key = "prefix+alt+p"
+type = "popup"
+command = "$HOME/.local/bin/herdr-project --pick"
+description = "choose project preset"
+width = "85%"
+height = "70%"

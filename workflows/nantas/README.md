@@ -60,6 +60,38 @@ herdr-project neonnew-mac --no-attach
 
 `--no-attach` 只创建或复用并聚焦目标，不打开新客户端，也可在外部终端使用。Herdr 内忘加时，脚本依据 `HERDR_ENV=1` 拒绝嵌套启动。远端入口不带此参数时打开远端独立界面；需要聚合界面时加此参数，然后在已有界面选择 linux-work。
 
+### 项目选择弹窗（Mac Local）
+
+安装上述启动器后，将 [picker.toml](presets/picker.toml) 的 `[[keys.command]]`
+条目合并到 Mac 的 `~/.config/herdr/config.toml`，先备份配置并核对快捷键冲突。
+保留现有表和命令，只添加该条目；不要用片段覆盖整份配置。
+
+```bash
+herdr config check
+herdr --session work server reload-config
+```
+
+在 Herdr 的 **Local** 界面按 `Ctrl+B`，再按 `Alt+P` 打开弹窗。
+选择器直接读取 `~/.config/herdr-project/presets.json`，显示名称、执行节点、Agent 和目录。
+用上下键或 `j/k` 选择，鼠标点选／滚轮也可改变选择；Enter 启动，Esc 或 `q` 取消。
+本地成功后弹窗自动退出并聚焦目标；远端结果或错误停留在弹窗，按 Enter、Esc 或 `q` 关闭。
+也可在普通交互终端运行 `herdr-project --pick`。
+
+选择后调用同一个启动器的 `--no-attach` 路径，保留实例复用、锁和歧义检查。
+Local 项目会聚焦对应工作区；远端成功后提示选择 `linux-work`（或预设指定的机器），
+需手动切换侧边栏机器。启动等待期间不要重复提交；若超时或失败，先检查目标状态再重试。
+旧格式不变，不复制项目清单，不修改 `state.json` 的含义。
+
+首版仅在 Mac 控制端的 Local 使用；快捷键不会替远端安装启动器。
+修改配置只需 reload，无需停止 `work` 或现有 Agent。卸载时只移除该自定义命令条目并 reload。
+验证：`just nantas-presets-test`。
+
+2026-10-22：Mac 启动器和快捷键已安装，配置检查和 `work` reload 成功，原有四个 terminal
+身份保持不变。Herdr 0.9.5 隔离会话实测弹窗打开、取消、Codex 0.163.0 启动、重复选择
+复用同一 terminal，以及成功后再次打开弹窗；未发送模型任务，临时会话已清理。
+用户已在当前 Herdr 窗口手动验证通过。远端提示通过测试，尚未通过新弹窗实测 Linux 启动。配置和旧启动器备份保留在 Mac 的
+`~/.config/herdr/local-backups/`，不进入仓库。
+
 ### 复用与上下文
 
 - 根据实际前台目录和 Agent 类型匹配，不依赖工作区标签。实例已经转到别的项目时保留原实例，另建目标项目实例。
