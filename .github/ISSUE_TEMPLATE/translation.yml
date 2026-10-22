@@ -13,7 +13,7 @@ body:
     id: translation-confirmation
     attributes:
       label: Is this a translation issue?
-      description: Bugs belong in the bug report template. Feature requests, ideas, and questions belong in Discussions.
+      description: Bugs belong in the bug report template. Features and maintenance belong in the Feature or maintenance task template.
       options:
         - label: I confirm this is a translation issue in the herdr docs, not a bug report, feature request, or question.
           required: true

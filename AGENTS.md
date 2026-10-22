@@ -25,7 +25,9 @@ These instructions are layered.
 
 ## nantas Fork Workflow
 
-This section applies only to the `nantas/herdr` fork. For tasks involving
+This section applies only to the `nantas/herdr` fork. Before issue/PR triage,
+planning, claiming, or implementation, read
+[the task tracking conventions](docs/agents/issue-tracker.md). For tasks involving
 nantas's Mac/Linux agent environment, `herdr-project` presets, session lifecycle,
 or neonspark private configuration sync, first read
 [the personal workflow guide](workflows/nantas/README.md).

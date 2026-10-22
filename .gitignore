@@ -9,6 +9,8 @@ __pycache__/
 .DS_Store
 
 /docs/*
+!/docs/agents/
+!/docs/agents/**
 !/docs/next/
 !/docs/next/**
 !/docs/preview/
