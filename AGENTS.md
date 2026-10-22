@@ -152,6 +152,24 @@ just check              # formatting check + cargo nextest + maintenance script 
 
 Run `just check` before committing unless Can explicitly accepts narrower validation. Do not bypass failing checks; fix the failure or explain exactly why a narrower check is enough.
 
+### nantas fork: macOS-only validation
+
+On nantas's Mac, the user has chosen macOS-only development setup; the Windows
+SDK/CRT is not installed. For this fork on that machine, the user-approved
+alternative to `just check`, including before commits, is:
+
+```bash
+just ci && just docs-contract-test
+```
+
+`just check` has no skip-Windows option: it runs `ci`, `windows-lint`, and
+`docs-contract-test`. The alternative omits only `windows-lint`; report Windows
+validation as not run, rather than claiming full `just check` passed. Do not
+repeat Windows SDK setup or request the same scope decision for routine macOS
+work. If a task requires Windows validation, revisit that scope and obtain SDK
+license acceptance before installation. This exception does not waive failures
+in the remaining checks or apply to other machines or upstream release checks.
+
 Windows MSVC cross-compilation from Unix requires SDK/CRT headers and libraries.
 Install `xwin` with `cargo install xwin --locked`, then run
 `just setup-windows-cross` once and accept Microsoft's SDK license when prompted.
