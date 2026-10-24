@@ -55,7 +55,7 @@ def clean_env():
 
 def api(prefix, *args):
     result = subprocess.run(['herdr', *prefix, *args], env=clean_env(),
-                            capture_output=True, text=True, timeout=60)
+                            capture_output=True, text=True, encoding='utf-8', timeout=60)
     if result.returncode:
         try:
             error = json.loads(result.stderr)['error']
@@ -115,7 +115,7 @@ def choose(panes, preset, previous):
 def save_state(path, state):
     fd, name = tempfile.mkstemp(prefix='.state-', dir=path.parent)
     try:
-        with os.fdopen(fd, 'w') as stream:
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
             json.dump(state, stream, indent=2)
         os.replace(name, path)
     finally:
@@ -161,7 +161,7 @@ def ensure(name, preset, state, persist, call):
 
 
 def load_presets():
-    presets = json.loads((CONFIG / 'presets.json').read_text())
+    presets = json.loads((CONFIG / 'presets.json').read_text(encoding='utf-8'))
     if not isinstance(presets, dict) or not presets:
         raise ValueError('No project presets configured')
     for name, preset in presets.items():
@@ -196,8 +196,11 @@ def picker_message(screen, message):
 
 
 def launch_selected(name, preset):
+    # Both ends of this Python pipe must agree, regardless of the Windows locale.
+    env = os.environ.copy()
+    env['PYTHONIOENCODING'] = 'utf-8'
     result = subprocess.run([sys.executable, str(Path(__file__).resolve()), name, '--no-attach'],
-                            capture_output=True, text=True, timeout=180)
+                            env=env, capture_output=True, text=True, encoding='utf-8', timeout=180)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or 'Project launch failed')
     status = json.loads(result.stdout)
@@ -276,7 +279,7 @@ def main():
             parser.error('--pick cannot be combined with a preset or --no-attach')
         curses.wrapper(pick_project)
         return
-    presets = json.loads((CONFIG / 'presets.json').read_text())
+    presets = json.loads((CONFIG / 'presets.json').read_text(encoding='utf-8'))
     if not args.preset:
         for name, preset in presets.items():
             print(name + '  ' + preset.get('machine', 'local/' + preset.get('session', ''))
@@ -294,7 +297,7 @@ def main():
     attach = ['herdr', 'session', 'attach', preset.get('session', 'work')]
     if 'machine' in preset:
         catalog = subprocess.run(['herdr', 'machine', 'list', '--json'], env=clean_env(),
-                                 capture_output=True, text=True, check=True, timeout=15)
+                                 capture_output=True, text=True, encoding='utf-8', check=True, timeout=15)
         profiles = [p for p in json.loads(catalog.stdout) if p['enabled'] and
                     preset['machine'] in (p['id'], p['label'])]
         if len(profiles) != 1:
@@ -303,7 +306,7 @@ def main():
                   '--remote-keybindings', 'server']
     state_path = CONFIG / 'state.json'
     with launch_lock(CONFIG / 'launch.lock'):
-        state = json.loads(state_path.read_text()) if state_path.exists() else {}
+        state = json.loads(state_path.read_text(encoding='utf-8')) if state_path.exists() else {}
         try:
             result = ensure(args.preset, preset, state, lambda: save_state(state_path, state),
                             lambda *a: api(prefix, *a))

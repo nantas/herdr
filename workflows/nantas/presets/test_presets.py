@@ -4,6 +4,7 @@ import unittest
 import subprocess
 import sys
 import tempfile
+import json
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('launcher', Path(__file__).with_name('herdr-project.py'))
@@ -13,6 +14,30 @@ PRESET = {'session': 'work', 'cwd': '/project', 'agent': 'codex', 'args': []}
 
 
 class PresetTests(unittest.TestCase):
+    def test_api_decodes_utf8_with_non_utf8_system_locale(self):
+        run = subprocess.run
+        payload = json.dumps({'result': {'title': '测试工作区'}}, ensure_ascii=False)
+
+        def emit_response(command, **kwargs):
+            return run([sys.executable, '-c',
+                        'import sys; sys.stdout.buffer.write(bytes.fromhex(sys.argv[1]))',
+                        payload.encode('utf-8').hex()], **kwargs)
+
+        with patch.object(launcher.subprocess, 'run', side_effect=emit_response), \
+                patch.object(subprocess, '_text_encoding', return_value='gbk'):
+            self.assertEqual(launcher.api(['--session', 'work'], 'pane', 'list'),
+                             {'title': '测试工作区'})
+
+    def test_picker_child_outputs_utf8_with_non_utf8_parent_locale(self):
+        with tempfile.TemporaryDirectory() as directory:
+            child = Path(directory) / 'launcher.py'
+            child.write_text("import json\nprint(json.dumps({'status': '测试🚀'}, ensure_ascii=False))\n",
+                             encoding='utf-8')
+            with patch.object(launcher, '__file__', str(child)), \
+                    patch.dict(launcher.os.environ, {'PYTHONIOENCODING': 'gbk'}), \
+                    patch.object(subprocess, '_text_encoding', return_value='gbk'):
+                self.assertIn('测试🚀', launcher.launch_selected('project', PRESET))
+
     def test_paths_are_validated_for_execution_node(self):
         for cwd in ('/remote/project', r'D:\Projects\art'):
             launcher.validate('project', {**PRESET, 'cwd': cwd})

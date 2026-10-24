@@ -16,6 +16,8 @@ Herdr UI 的 Windows 安装排查、连接命名会话及字体设置也记录�
 
 本机预设使用 `session: work` 和 Windows 绝对目录；远端预设使用已保存的 `machine` 标签和远端绝对目录。远端目录若为符号链接，先通过 SSH 在目标目录执行 `pwd -P`，保存实际路径，以便与 Herdr 返回的前台目录匹配。每台控制端独立维护预设、状态与锁，不复制旧局域网配置或 `state.json`。
 
+2026-10-24 修复 Windows 项目选择器的编码问题：Herdr CLI 输出 UTF-8 JSON，而 Python 的 `subprocess.run(text=True)` 在本机默认按 GBK 解码，已有窗格数据包含非 ASCII 字符时会先抛 `UnicodeDecodeError`，随后因 stdout 为 `None` 导致 JSON 解析错误。启动器已为 CLI 输出、配置及状态文件显式使用 UTF-8；选择器启动 Python 子进程时还设置 `PYTHONIOENCODING=utf-8`，使输出端和读取端一致，不能仅靠外层 Python 的 `-X utf8`。本机旧脚本已备份后更新；20 项启动器/选择器测试通过，实际选择器子进程路径启动本机新项目成功，再次调用复用原 terminal，未创建重复实例。完整 curses 键盘交互仍待用户再次操作确认。弹窗错误目前仅显示在选择器中，不自动写入 Herdr 日志。
+
 用 `herdr machine add <SSH别名> --label <标签> --remote-session work` 保存远端，再运行 `herdr session attach work` 打开聚合界面。在 Local 按 `Ctrl+B` 后按 `Alt+P` 选择项目；远端项目准备完成后关闭提示，再从侧边栏选择该机器。命令行也可执行 `herdr-project <预设名>`；已有界面时用 `--no-attach`。
 
 直接打开 SSH 界面时，要使用远端扩展快捷键，需加 `--remote-keybindings server`。项目启动器的远端 attach 已自动加此参数；手工连接例如 `herdr --remote mac-pi --session work --remote-keybindings server`。未加该参数时，0.9.5 的直接 SSH 客户端不提供远端自定义命令，不能据此判断远端工具没有安装。
