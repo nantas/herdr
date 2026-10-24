@@ -6,6 +6,8 @@
 
 ### Windows 控制端
 
+WezTerm 右键与 pi 工作状态的本地修复见 [Windows 终端配置](terminal/README.md)，可复用配置保存在同目录；无需修改 Herdr 核心或重新编译。
+
 启动器支持 Windows 的进程文件锁，Windows Python 还需要 `windows-curses`（已验证 Python 3.14 与 windows-curses 2.4.2）。安装 Herdr 时保留完整 Windows ZIP 中的 ConPTY 运行库。
 
 将启动器保存到 `%USERPROFILE%\.config\herdr-project\herdr-project.py`，将本机专用的预设放到同目录 `presets.json`。通过 PATH 中的 `herdr-project.cmd` 调用实际 Python 路径及脚本，并转发 `%*`；不要依赖 Windows Store 的 Python 别名。Windows Herdr 配置在 `%APPDATA%\herdr\config.toml`，项目弹窗命令使用 PATH 中的 `herdr-project --pick`，其余字段沿用 `presets/picker.toml`。
