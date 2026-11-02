@@ -31,9 +31,11 @@ planning, claiming, or implementation, read
 nantas's Mac/Linux agent environment, `herdr-project` presets, session lifecycle,
 or neonspark private configuration sync, first read
 [the personal workflow guide](workflows/nantas/README.md).
-Setting up, re-syncing, or verifying a machine from this repository's personal
-tooling starts with [the bootstrap workflow](workflows/nantas/bootstrap.md);
-it orders the per-feature guides and lists each step's completion checks.
+Setting up, re-syncing, or verifying personal tooling — on this host or any
+reachable saved LAN machine — starts with [the bootstrap workflow](workflows/nantas/bootstrap.md).
+Re-sync checks saved machines and applies server-node steps on each reachable
+one; finishing only the current host is not done. The workflow orders the
+per-feature guides and lists each step's completion checks.
 Reusable configuration and tools are maintained under `workflows/nantas/`.
 Keep private configuration contents and backups on their execution nodes;
 do not include them in repository documentation, commits, or agent output.
