@@ -2,6 +2,10 @@
 
 本目录是本 fork 的个人工作流维护入口，不属于 Herdr 官方功能。脚本使用 Herdr CLI，不改动核心运行时。原始讨论留在本地 `.local/prd/`；可复用工具以本目录为准。
 
+## 新机器初始化入口
+
+在新机器上部署或重新同步本目录维护的个人工作流时，从 [bootstrap.md](bootstrap.md) 开始：它按机器类型排序全部步骤、给出每步的完成判据与移除条件，并链接回各功能文档。
+
 2026-10-22 原双机验证环境：Mac 与 Linux 均为 Herdr 0.9.5 stable、Codex CLI 0.163.0，Herdr 位于各自的 `~/.local/bin/`。需要 Python 3、SSH，以及 PATH 中的 `herdr` 和 `codex`。以下旧拓扑仅适用于对应局域网，不应直接复制到其他机器。
 
 ### Windows 控制端
