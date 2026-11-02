@@ -1,9 +1,14 @@
 id = "pi"
-version = "2026.10.01.1"
+version = "2026.11.02.1"
 min_engine_version = 1
-updated_at = "2026-10-01T00:00:00Z"
+updated_at = "2026-11-02T00:00:00Z"
 aliases = ["herdr:pi"]
 
+# pi renders the working indicator either embedded in the composer border
+# (`── ⠋ Working ──...`) or, when the composer is replaced (for example by an
+# editor extension), as a standalone status line above it. The standalone line
+# is indented by one space and may carry an interrupt hint suffix, so anchor on
+# the spinner plus the word "Working" and tolerate both.
 [[rules]]
 id = "working_literal"
 state = "working"
@@ -12,7 +17,7 @@ region = "whole_recent"
 visible_working = true
 any = [
   { contains = ["Working..."] },
-  { line_regex = ['^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Working$'] },
+  { line_regex = ['^\s*[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Working\b'] },
 ]
 
 [[rules]]
@@ -23,5 +28,18 @@ region = "bottom_non_empty_lines(12)"
 visible_working = true
 any = [
   { line_regex = ['^── [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Working ─+$'] },
-  { line_regex = ['^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Working$'] },
+  { line_regex = ['^\s*[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Working\b'] },
+]
+
+# Terminal-title integrations (for example the pi-tab-status package) append
+# `:running...` to the OSC title while a turn is active. The suffix is unique
+# to the running state and independent of on-screen layout.
+[[rules]]
+id = "working_title"
+state = "working"
+priority = 90
+region = "osc_title"
+visible_working = true
+any = [
+  { contains = [":running..."] },
 ]
