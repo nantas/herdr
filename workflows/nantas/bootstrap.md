@@ -17,6 +17,7 @@
 | Herdr Pi 集成 | ✅（在跑 pi 的节点装） | ✅ |
 | Herdr UI（图形端） | ✅ 可选 | 见 terminal/README.md 的 Herdr UI 节 |
 | 机器互连 | ✅ | ✅ |
+| Hunk CLI / 全局 review skill | ✅ | ✅（npm） |
 | neonspark 私有配置 | 见 [README 对应节](README.md#neonspark-私有配置同步) | 同左 |
 
 ## 同步目标
@@ -35,9 +36,9 @@ herdr machine status <label>
 
 文件复制和 `herdr integration install` 不会经 `herdr --machine` 转发。对远端用 `ssh -o BatchMode=yes -o ConnectTimeout=8 "$target"`，不要交互式认证。`herdr --machine <label> server agent-manifests` 和 `reload-agent-manifests` 可以在控制端转发，用来核对和重载，不能替代在节点上写文件。
 
-本次同步涉及的服务器节点步骤，凡完成判据依赖跑 pi 或 Herdr 服务器的那台机器，就对目标集合逐台检查；未达到判据就在该节点执行同一步。当前必须这样执行的是下文 2.3 与 2.4。自启动、键位与本机路径、Herdr UI、机器互连、neonspark 私有配置不自动扇出；用户点名要同步那些项时，再按对应小节在目标节点执行。
+本次同步涉及的服务器节点步骤，凡完成判据依赖跑 pi 或 Herdr 服务器的那台机器，就对目标集合逐台检查；未达到判据就在该节点执行同一步。当前必须这样执行的是下文 2.3、2.4 与 2.8。自启动、键位与本机路径、Herdr UI、机器互连、neonspark 私有配置不自动扇出；用户点名要同步那些项时，再按对应小节在目标节点执行。
 
-完成判据：结果逐台写明已启用机器是 reachable 还是不可达；每台 reachable 机器都有 2.3 与 2.4 的完成判据，而不只是当前机器。
+完成判据：结果逐台写明已启用机器是 reachable 还是不可达；每台 reachable 机器都有 2.3、2.4 与 2.8 的完成判据，而不只是当前机器。
 
 ## 1. 通用前置
 
@@ -147,6 +148,41 @@ rm ~/Library/LaunchAgents/local.herdr.gpui-session.plist
 
 `herdr machine add <SSH目标> --remote-session work --label <标签>`；地址与认证按新机器实际网络填写，不复制旧局域网值。完成判据：`herdr machine status <label>` 为 reachable，UI 侧边栏出现该机器并可切换。
 
+### 2.8 Hunk CLI 与全局 review skill
+
+对当前机器及[同步目标](#同步目标)中每台 reachable 设备执行，安装在实际运行 Agent、访问项目的节点上。来源：[官方安装说明](https://www.hunk.dev/docs/start/install/)与[全局 skill 说明](https://www.hunk.dev/docs/agents/review-skill/)。先检查 `command -v hunk` 和 `hunk --version`；已有安装沿用原渠道，不创建第二份。
+
+macOS/Linux 首次安装使用官方自包含二进制（不依赖 Node.js）：
+
+```bash
+curl -fsSL https://hunk.dev/install.sh -o /tmp/hunk-install.sh
+sh /tmp/hunk-install.sh --no-modify-path
+mkdir -p ~/.local/bin
+ln -s ~/.hunk/bin/hunk ~/.local/bin/hunk
+hunk --version
+```
+
+安装器将二进制和配套 skills 放在 `~/.hunk/`，发布包提供校验和时自动验证。这里复用已有的 `~/.local/bin` PATH，不修改 shell 配置；该目录不在 PATH 时先按节点现有方式配置。创建链接前检查目标，已有正确链接直接复用，其他同名文件先核对，不用 `ln -sf` 覆盖。远端通过 SSH 在目标节点运行，`herdr --machine` 不转发安装。
+
+Windows 使用 Node.js 22+：`npm install --global hunkdiff`。已有安装升级使用 `hunk update`（mise/Nix 安装仍由原管理器升级）。同步时逐台记录版本，避免控制端和远端版本不一致。
+
+全局安装官方 `hunk-review` skill（需要 Node.js/npx；不是项目级安装）：
+
+```bash
+npx skills add modem-dev/hunk -g --skill hunk-review -a codex -y
+```
+
+该 skill 是指针，通过 `hunk skill show hunk-review` 获取本机 CLI 对应版本的说明，不复制固定版本的完整说明。使用其他 Agent 时按官方说明增加对应 `-a`。Unix 上若已运行 Pi，把全局 skill 链接到其 skills 目录；已有条目先比较，不覆盖：
+
+```bash
+mkdir -p ~/.pi/agent/skills
+ln -s ~/.agents/skills/hunk-review ~/.pi/agent/skills/hunk-review
+```
+
+完成判据：在该节点实际使用的交互 shell 中，`hunk --version` 与 `hunk skill show hunk-review` 均成功；Codex 的全局 skill 可发现，Pi 的链接目标含 `SKILL.md`。已有 Pi 会话由用户执行 `/reload`，不要向正在工作的 Agent 注入输入；不自动启动交互 Hunk TUI 或更改 Git pager。
+
+2026-11-09 已验证：Mac 与 linux-work 均为 Hunk 0.24.1，发布包校验通过；CLI 经 `~/.local/bin/hunk` 可达，全局指针在 `~/.agents/skills/hunk-review`，Codex 与 Pi 的 skills 目录链接到该指针。版本、指针内容及 `hunk skill show` 验证通过；未执行交互 diff 验收。Windows 步骤来自官方说明，未在本次安装中实测。
+
 ## 3. 验证汇总
 
 | 项 | 命令 / 判据 |
@@ -158,10 +194,13 @@ rm ~/Library/LaunchAgents/local.herdr.gpui-session.plist
 | pi 集成 | `herdr integration status` → pi: current；问答 → blocked |
 | Herdr UI | `Herdr config check`；图标启动连 work；`launchctl getenv HERDR_SESSION` |
 | 互连 | `herdr machine status` → reachable |
-| 局域网 | 每台已启用机器有 status；reachable 节点的 2.3 与 2.4 判据与本机相同 |
+| Hunk | 每个节点 `hunk --version`、`hunk skill show hunk-review`；全局 skill 可发现 |
+| 局域网 | 每台已启用机器有 status；reachable 节点的 2.3、2.4 与 2.8 判据与本机相同 |
 
 ## 4. 不同步的内容（边界）
 
 以下内容不随本仓库同步，留在各自执行节点：SSH 密钥与各类凭据；pi 的模型、授权与包配置（`~/.pi/agent` 中除 Herdr 集成文件外，由 pi-config / neonspark 机制另行管理）；Herdr UI 安装包本体；各节点备份；机器地址与外置盘路径。仓库文档不写入任何私钥、token 或完整个人配置内容。
 
 仓库来源、且必须装在跑 pi 的节点上的文件要同步到每台可达的已保存机器：当前是 pi 检测覆盖和 Herdr Pi 集成。这不属于上面的私有配置。
+
+Hunk 按 2.8 从官方发布源逐节点安装，不复制其他机器的二进制或个人配置；CLI 与全局 review skill 属于同步目标，认证材料与项目 review 内容不随之同步。
